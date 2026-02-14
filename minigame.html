@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pauzespel - Leerbot</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        /* Extra styling specifiek voor het minigame */
+        .game-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: var(--border-radius-lg);
+            padding: 30px 20px;
+            box-shadow: var(--shadow-hover);
+        }
+        .timer-bar {
+            height: 12px;
+            background: var(--primary-light);
+            border-radius: 30px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .timer-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 100%;
+            transition: width 0.1s linear;
+        }
+        .question {
+            font-size: 48px;
+            font-weight: 800;
+            text-align: center;
+            margin: 30px 0;
+            color: var(--primary-dark);
+        }
+        .options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 30px 0;
+        }
+        .option-btn {
+            background: var(--card-bg);
+            border: 3px solid var(--primary-light);
+            border-radius: 60px;
+            padding: 20px 10px;
+            font-size: 20px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            color: var(--text);
+            box-shadow: 0 4px 0 rgba(0,0,0,0.1);
+        }
+        .option-btn:hover {
+            background: var(--primary-light);
+            transform: scale(1.02);
+        }
+        .option-btn.correct {
+            background: #10b981;
+            color: white;
+            border-color: #10b981;
+            box-shadow: 0 4px 0 #0e8f5e;
+        }
+        .option-btn.wrong {
+            background: #ef4444;
+            color: white;
+            border-color: #ef4444;
+            box-shadow: 0 4px 0 #b91c1c;
+        }
+        .option-btn.disabled {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .score {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 20px 0;
+        }
+        .waiting-screen {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .cooldown-timer {
+            font-size: 48px;
+            font-weight: 800;
+            color: var(--primary);
+            margin: 20px 0;
+        }
+        .result-stats {
+            background: var(--primary-light);
+            border-radius: var(--border-radius-lg);
+            padding: 30px;
+            margin: 30px 0;
+        }
+        .result-stats p {
+            font-size: 24px;
+            margin: 15px 0;
+        }
+        .btn-large {
+            font-size: 20px;
+            padding: 16px 32px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <a href="index.html" class="logo">📚 Leerbot</a>
+            <div class="nav-links">
+                <span class="user-email" id="username"></span>
+                <a href="dashboard.html" class="btn outline small">← Dashboard</a>
+                <button onclick="logout()" class="btn outline small">Uitloggen</button>
+            </div>
+        </header>
+
+        <main id="main-content" class="game-container">
+            <!-- Wacht scherm (cooldown) -->
+            <div id="waiting-screen" class="waiting-screen">
+                <h1>🎮 Pauzespel</h1>
+                <div id="wait-message-container">
+                    <p id="wait-message">Controleren of je mag spelen...</p>
+                    <div class="timer-bar" style="max-width: 300px; margin: 20px auto;">
+                        <div class="timer-fill" id="wait-timer-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="cooldown-timer" id="wait-time"></div>
+                </div>
+                <button id="play-now-btn" class="btn btn-large" style="display: none;" onclick="startGame()">🎮 Speel nu!</button>
+            </div>
+
+            <!-- Actief spel scherm -->
+            <div id="game-screen" style="display: none;">
+                <h1>🎮 Pauzespel</h1>
+                <div class="score">Score: <span id="score">0</span>/5</div>
+                <div class="timer-bar">
+                    <div class="timer-fill" id="timer-fill" style="width: 100%;"></div>
+                </div>
+                <div class="question" id="question"></div>
+                <div class="options" id="options"></div>
+                <p style="text-align: center; color: var(--text-light);" id="feedback"></p>
+            </div>
+
+            <!-- Resultaat scherm -->
+            <div id="result-screen" style="display: none; text-align: center;">
+                <h1>🎉 Spel voltooid!</h1>
+                <div class="result-stats">
+                    <p>Je had <span id="final-score">0</span> van de 5 goed!</p>
+                    <p>Je verdient <span id="xp-earned">0</span> XP!</p>
+                </div>
+                <div style="display: flex; gap: 20px; justify-content: center;">
+                    <button onclick="window.location='dashboard.html'" class="btn">Naar dashboard</button>
+                    <button onclick="checkStatus()" class="btn outline">Opnieuw spelen?</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="script.js"></script>
+    <script>
+        // ========== GLOBALE VARIABELEN ==========
+        let huidigeVraagIndex = 0;
+        let vragen = [];
+        let score = 0;
+        let timerInterval;
+        let timeLeft = 5;
+        let cooldownInterval;
+
+        // ========== INIT ==========
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!window.supabase) {
+                alert('Fout: Kan geen verbinding maken.');
+                return;
+            }
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = 'index.html';
+                return;
+            }
+            document.getElementById('username').textContent = session.user.email;
+            await checkStatus();
+        });
+
+        // ========== STATUS CHECKEN (cooldown) ==========
+        async function checkStatus() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
+            try {
+                const res = await fetch('/api/minigame-status', {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                const data = await res.json();
+                if (data.canPlay) {
+                    document.getElementById('wait-message').textContent = 'Je kunt nu spelen!';
+                    document.getElementById('wait-time').textContent = '';
+                    document.getElementById('play-now-btn').style.display = 'inline-block';
+                    document.getElementById('wait-timer-fill').style.width = '0%';
+                    if (cooldownInterval) clearInterval(cooldownInterval);
+                } else {
+                    const mins = Math.floor(data.waitSeconds / 60);
+                    const secs = data.waitSeconds % 60;
+                    document.getElementById('wait-message').textContent = 'Je hebt al gespeeld. Wacht nog:';
+                    document.getElementById('wait-time').textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                    document.getElementById('play-now-btn').style.display = 'none';
+                    startCooldownTimer(data.waitSeconds);
+                }
+            } catch (e) {
+                console.error('Fout bij checkStatus:', e);
+                document.getElementById('wait-message').textContent = 'Fout bij ophalen status';
+            }
+        }
+
+        function startCooldownTimer(seconds) {
+            if (cooldownInterval) clearInterval(cooldownInterval);
+            const startTime = Date.now();
+            const endTime = startTime + seconds * 1000;
+            const fill = document.getElementById('wait-timer-fill');
+            const timeDisplay = document.getElementById('wait-time');
+
+            cooldownInterval = setInterval(() => {
+                const now = Date.now();
+                const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
+                if (remaining <= 0) {
+                    clearInterval(cooldownInterval);
+                    checkStatus(); // herlaad status
+                } else {
+                    const mins = Math.floor(remaining / 60);
+                    const secs = remaining % 60;
+                    timeDisplay.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                    const percentage = (remaining / seconds) * 100;
+                    fill.style.width = percentage + '%';
+                }
+            }, 200);
+        }
+
+        // ========== SPEL STARTEN ==========
+        async function startGame() {
+            document.getElementById('waiting-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
+            try {
+                const res = await fetch('/api/minigame-start', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${session.access_token}`
+                    }
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    if (res.status === 429) {
+                        showToast('Je moet nog wachten!', 'warning');
+                        document.getElementById('game-screen').style.display = 'none';
+                        document.getElementById('waiting-screen').style.display = 'block';
+                        checkStatus();
+                        return;
+                    }
+                    throw new Error(err.error || 'Fout bij starten');
+                }
+                const data = await res.json();
+                vragen = data.vragen; // array met { vraag, opties, goed, id }
+                huidigeVraagIndex = 0;
+                score = 0;
+                toonVraag();
+            } catch (e) {
+                showToast('Fout bij starten spel: ' + e.message, 'error');
+                document.getElementById('game-screen').style.display = 'none';
+                document.getElementById('waiting-screen').style.display = 'block';
+            }
+        }
+
+        function toonVraag() {
+            if (huidigeVraagIndex >= vragen.length) {
+                eindeSpel();
+                return;
+            }
+            const vraag = vragen[huidigeVraagIndex];
+            document.getElementById('question').textContent = vraag.vraag;
+            const optionsDiv = document.getElementById('options');
+            optionsDiv.innerHTML = '';
+            vraag.opties.forEach(optie => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.textContent = optie;
+                btn.onclick = () => beantwoord(optie, vraag.goed);
+                optionsDiv.appendChild(btn);
+            });
+            document.getElementById('score').textContent = score;
+            startTimer();
+        }
+
+        function startTimer() {
+            timeLeft = 5;
+            const fill = document.getElementById('timer-fill');
+            fill.style.width = '100%';
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft -= 0.1;
+                const percentage = Math.max(0, (timeLeft / 5) * 100);
+                fill.style.width = percentage + '%';
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    // Tijd om, antwoord is fout
+                    volgendeVraag(false);
+                }
+            }, 100);
+        }
+
+        function beantwoord(gekozen, goed) {
+            clearInterval(timerInterval);
+            const buttons = document.querySelectorAll('.option-btn');
+            buttons.forEach(btn => {
+                btn.classList.add('disabled');
+                if (btn.textContent === goed) {
+                    btn.classList.add('correct');
+                } else if (btn.textContent === gekozen && gekozen !== goed) {
+                    btn.classList.add('wrong');
+                }
+            });
+            const isCorrect = (gekozen === goed);
+            if (isCorrect) {
+                score++;
+                showToast('✅ Goed!', 'success');
+            } else {
+                showToast('❌ Helaas...', 'error');
+            }
+            document.getElementById('score').textContent = score;
+
+            setTimeout(() => {
+                volgendeVraag(isCorrect);
+            }, 1000);
+        }
+
+        function volgendeVraag(wasCorrect) {
+            huidigeVraagIndex++;
+            if (huidigeVraagIndex >= vragen.length) {
+                eindeSpel();
+            } else {
+                toonVraag();
+            }
+        }
+
+        async function eindeSpel() {
+            document.getElementById('game-screen').style.display = 'none';
+            document.getElementById('result-screen').style.display = 'block';
+            document.getElementById('final-score').textContent = score;
+            const xp = score * 10;
+            document.getElementById('xp-earned').textContent = xp;
+
+            // XP claimen bij de server
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+            try {
+                await fetch('/api/minigame-claim', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({ score })
+                });
+                // Toon eventueel een toast, maar niet nodig
+            } catch (e) {
+                console.error('Fout bij claimen XP', e);
+                showToast('XP kon niet worden opgeslagen', 'warning');
+            }
+        }
+
+        // ========== EVENTUELE EXTRA FUNCTIES ==========
+        window.logout = async function() {
+            await supabase.auth.signOut();
+            window.location.href = 'index.html';
+        };
+    </script>
+</body>
+</html>

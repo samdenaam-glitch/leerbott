@@ -3,12 +3,14 @@
   command = "npm install"
   functions = "netlify/functions"
 
+# API routes - redirect to Netlify Functions
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
   force = true
 
+# SPA fallback - redirect all other routes to index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"

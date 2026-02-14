@@ -13,7 +13,7 @@ document.getElementById('nieuwLijstBtn').addEventListener('click', async () => {
   if (!naam) return
   const beschrijving = prompt('Korte beschrijving (niet verplicht):', '')
   const { data: { session } } = await supabase.auth.getSession()
-  const res = await fetch('/api?resource=lists', {
+  const res = await fetch('/api/lists', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -26,7 +26,7 @@ document.getElementById('nieuwLijstBtn').addEventListener('click', async () => {
 })
 
 async function laadLijsten(token) {
-  const res = await fetch('/api?resource=lists', {
+  const res = await fetch('/api/lists', {
     headers: { 'Authorization': `Bearer ${token}` }
   })
   if (!res.ok) {
@@ -52,7 +52,7 @@ async function laadLijsten(token) {
       if (!naam) return
       const beschrijving = prompt('Korte beschrijving (niet verplicht):', '')
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api?resource=lists', {
+      const res = await fetch('/api/lists', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

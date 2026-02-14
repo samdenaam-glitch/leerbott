@@ -1,7 +1,7 @@
 {
-  "name": "leerbot",
+  "name": "leerbot-functions",
   "version": "1.0.0",
-  "type": "module",
+  "description": "Netlify Functions for Leerbot API",
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0"
   }
