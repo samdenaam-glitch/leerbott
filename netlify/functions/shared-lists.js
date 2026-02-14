@@ -1,4 +1,4 @@
-const { supabase, getUserFromToken } = require('./_shared/supabase')
+const { supabase, getUserFromToken } = require('./_lib/supabase')
 
 exports.handler = async (event, context) => {
   // Handle CORS
